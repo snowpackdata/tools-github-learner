@@ -1,0 +1,14 @@
+paths:
+  base_dir: ~/tools-github-learner
+  output_dir: learnings
+
+models:
+  default_model: mlx-community/gemma-3-12b-it-8bit
+  alternatives:
+    - mlx-community/SmolLM-135M-Instruct-4bit #smallest
+    - mlx-community/gemma-3-1b-it-qat-8bit #small
+    - mlx-community/gemma-3-12b-it-8bit #big
+
+analysis:
+  max_files: 0  # Default max files (3 = conservative for small models, 0 = unlimited)
+  max_prompt_chars: 150000 # Default max characters for the combined prompt ; to-do: make this dynamic based on model context window

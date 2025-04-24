@@ -1,0 +1,47 @@
+---
+description: debug, debugging, error fixes, code issue, troubleshooting, fix problem
+globs: 
+alwaysApply: false
+---
+---
+description: Use for all debugging, troubleshooting, problem solving, and other code error fixes
+globs: 
+alwaysApply: false
+---
+# Debugging Methodology for Cursor
+
+This document outlines a structured approach to debugging complex issues, based on a successful investigation into a release process failure in the `snowpack-stack` project.
+
+## Core Principles
+
+1.  **Understand the Goal:** Clearly define what success looks like and what the primary objective of the fix is (e.g., "simple and robust release process").
+2.  **Context is Key:** Before diving into code, thoroughly review the history:
+    *   What changes were made recently?
+    *   What attempts to fix the issue have succeeded or failed previously?
+    *   What are the explicit requirements or constraints (e.g., existing pre-commit hooks, specific workflows)?
+3.  **Reproduce & Observe:** If possible, reproduce the failure consistently. Carefully analyze the exact error messages, logs, and CLI output at the point of failure.
+4.  **Systematic Root Cause Analysis:**
+    *   **Brainstorm:** Generate 3-5 potential root causes, considering interactions between different components (e.g., scripts, hooks, configurations).
+    *   **Prioritize:** Rank potential causes based on likelihood (how well does it explain the observed symptoms?) and impact (how fundamental is the potential cause?). Focus on the most likely direct causes first.
+5.  **Develop Targeted Solutions:**
+    *   **Generate Options:** For the top 1-2 root causes, propose 2-4 distinct solution designs.
+    *   **Evaluate:** Assess each solution against the original **Goal** (simplicity, robustness, effort) and **Context** (does it conflict with other requirements?). Consider trade-offs.
+    *   **Refine & Recommend:** Select the most promising solution, refining the plan if necessary. Clearly state the recommendation and the reasoning.
+6.  **Implement Methodically & Test:**
+    *   Apply the chosen fix step-by-step.
+    *   **Test Frequently:** After applying the fix, immediately test the specific scenario that was failing. *Also*, test related scenarios (e.g., different flags, edge cases) to ensure the fix didn't break anything else.
+    *   If implementing a complex fix, reset the state and test the *entire* process from a clean start.
+7.  **Document:** Update relevant documentation (`README.md`, specific guides) to reflect the fix and the corrected process. Explain *why* the process works the way it does now.
+8.  **Meta-Reflection (Self-Improvement):** Briefly reflect on the debugging process itself. What worked well? What could be improved? Capture key learnings for future use (like this document!).
+
+## Example Application (Release Process Debugging)
+
+*   **Goal:** Simple, robust release process.
+*   **Context:** Pre-commit hook checking version consistency; release script updating files then committing then tagging.
+*   **Observation:** Commit failed during `snowpack release create` due to pre-commit hook detecting inconsistency between bumped version files (staged) and *old* latest tag.
+*   **Root Cause Prioritization:** #1: Pre-commit hook conflict (timing issue). #2: Release script order (commit before tag).
+*   **Solutions Evaluated:** A) Skip hook via message, B) Skip hook via `--no-verify`, C) Tag before commit, D) Simplify versioning entirely.
+*   **Recommendation:** C (Tag before commit) chosen for robustness without bypassing checks.
+*   **Implementation & Test:** Modified `release.py` order, reset state, ran failing command (`snowpack release create patch --pre-release --no-push`), confirmed success.
+*   **Documentation:** Updated `README.md` to detail the new tag-before-commit order.
+*   **Meta-Reflection:** Captured this process in `debugging.mdc`. 
