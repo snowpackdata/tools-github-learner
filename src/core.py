@@ -144,13 +144,12 @@ def clone_repository(url: str, target_dir: Optional[Path] = None) -> Path:
         sys.exit(1)
 
 
-def analyze_repository(repo_dir: Path, language_model: str, max_files: int = None):
+def analyze_repository(repo_dir: Path, language_model: str):
     """Analyze a repository using files-to-prompt and local LLM.
     
     Args:
         repo_dir: Path to the repository directory
         language_model: Name of the language model to use
-        max_files: Maximum number of files to include in analysis (None = use config value)
     """
     current_config = load_config() # Load fresh config for analysis settings
     # Determine LEARNINGS_DIR within the function if needed for saving input file
@@ -163,20 +162,8 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
         learnings_path = BASE_DIR / learnings_path
     os.makedirs(learnings_path, exist_ok=True) # Ensure dir exists
 
-    # Use config value if max_files is not provided
-    if max_files is None:
-        max_files = current_config.get("analysis", {}).get("max_files", 3) # Default to 3 if missing
-
-    # --- DEBUG LOG --- 
-    print(f"DEBUG: Effective max_files = {max_files}")
-    # --- END DEBUG LOG ---
-
-    max_prompt_chars = current_config.get("analysis", {}).get("max_prompt_chars", 15000) # Default if missing
-
     console.print(f"[bold green]Analyzing repository[/bold green]: {repo_dir}")
     console.print(f"[bold green]Using language model[/bold green]: {language_model}")
-    console.print(f"[bold green]Max files to process[/bold green]: {'Unlimited' if max_files <= 0 else max_files}")
-    console.print(f"[bold green]Max prompt characters[/bold green]: {max_prompt_chars}")
     
     # Remove any "mlx:" prefix if present
     if language_model.startswith("mlx:"):
@@ -218,11 +205,6 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
                 # Skip binary files
                 continue
     
-    # Limit the number of files if max_files is set
-    if max_files > 0 and len(file_list) > max_files:
-        console.print(f"[bold yellow]Limiting analysis to {max_files} files (out of {len(file_list)}) to fit context window[/bold yellow]")
-        file_list = file_list[:max_files]
-    
     # Create a temporary file to store the output
     with tempfile.NamedTemporaryFile(delete=False, mode='w+') as temp_file:
         # Build the command to run files-to-prompt with markdown option
@@ -243,10 +225,6 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
         temp_file.seek(0)
         prompt = temp_file.read()
 
-        # --- DEBUG LOG --- 
-        print(f"DEBUG: Length of files-to-prompt output (prompt var): {len(prompt)}")
-        # --- END DEBUG LOG ---
-        
         # --- Refined File Detail Extraction ---
         prompt_lines = prompt.split('\n')
         file_details = [] # Store full paths now
@@ -266,8 +244,6 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
                         # Ignore lines that cause errors during path construction/resolution
                         pass 
         # --- End Refined File Detail Extraction ---
-
-        # --- REMOVED LOG A ---
 
     # --- Prepare Input Text Content ---
     input_text_content = f"# Input Files for {repo_dir.name} Analysis\n\n"
@@ -351,56 +327,36 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
         )
         final_repo_analysis_prompt += "\nWarning: Output token limit could not be determined."
 
-    # Construct the final prompt sent to the model
-    final_prompt_for_llm = prompt + "\n\n" + final_repo_analysis_prompt
-    # --- End Prompt Modification ---
+    # Construct the final prompt parts
+    user_prompt_content = prompt # The combined file content
+    system_prompt_content = final_repo_analysis_prompt # The analysis instructions
 
     # Send the prompt to the local LLM using direct model loading
     timestamp = datetime.now().strftime("%H:%M:%S")
     console.print(f"[{timestamp}] [bold green]Generating AI analysis...[/bold green]")
     
     try:
-        # Instead of using llm.get_model, directly use MlxModel
-        try:
-            from llm_mlx import MlxModel
-            model = MlxModel(language_model)
-        except ImportError:
-            # Fallback to llm's get_model if llm_mlx isn't available
-            import llm
-            model = llm.get_model(language_model)
-        
-        # --- DEBUG LOG (using final prompt length) ---
-        print(f"DEBUG: Length of FINAL prompt sent to LLM (chars): {len(final_prompt_for_llm)}")
-        # --- END DEBUG LOG ---
-
-        # --- Fail Fast Check (Use Character Limit for now) ---
-        # Note: We could potentially use the *input_tokens* count vs a token limit 
-        # derived from max_prompt_chars, but char limit is simpler for now.
-        if len(final_prompt_for_llm) > max_prompt_chars:
-            error_message = (
-                f"Combined prompt content ({len(final_prompt_for_llm)} characters) exceeds the configured character limit "
-                f"({max_prompt_chars} characters). Analysis aborted."
-            )
-            console.print(f"[bold red]Error: {error_message}[/bold red]")
-            console.print("Consider increasing 'max_prompt_chars' in config.yaml, reducing '--max-files',")
-            console.print("or using a model with a larger context window.")
-            error_header = f"# {repo_dir.name} github repo reviewed by {language_model}\n\n"
-            return error_header + f"Error: {error_message}\n" # Return the error with the new header
-        # --- End Fail Fast Check ---
+        # Let llm library handle model loading and plugin dispatch
+        import llm 
+        model = llm.get_model(language_model)
 
         # Generate the response using the MODIFIED prompt
-        # Try passing max_tokens directly to the prompt method
-        response = model.prompt(
-            final_prompt_for_llm, 
-            max_tokens=available_output_tokens # Pass calculated limit
-        )
+        # Conditionally pass max_tokens based on model provider prefix
+        if language_model.startswith("gemini-"):
+            # Gemini plugin doesn't accept max_tokens here
+            response = model.prompt(
+                prompt=user_prompt_content,
+                system=system_prompt_content
+            )
+        else:
+            # Assume other models (like local mlx) might accept max_tokens
+            response = model.prompt(
+                prompt=user_prompt_content,
+                system=system_prompt_content,
+                max_tokens=available_output_tokens 
+            )
         
-        # --- DEBUG LOG ---
-        response_text = response.text()
-        print(f"DEBUG: Raw response_text length: {len(response_text)}")
-        print(f"DEBUG: Raw response_text START: {response_text[:200]}...")
-        print(f"DEBUG: Raw response_text END: ...{response_text[-200:]}")
-        # --- END DEBUG LOG ---
+        response_text = response.text() # Keep getting the text
 
         # Format the successful analysis output with the new header
         analysis_header = f"# {repo_dir.name} github repo reviewed by {language_model}\n\n"

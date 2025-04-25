@@ -3,8 +3,9 @@ paths:
   output_dir: learnings
 
 models:
-  default_model: mlx-community/gemma-3-27b-it-qat-4bit
+  default_model: gemini-2.5-flash-preview-04-17
   available_models:
+    # local
     mlx-community/SmolLM-135M-Instruct-4bit: #smallest
       context_window: 32000
     mlx-community/gemma-3-1b-it-qat-8bit: #small
@@ -13,7 +14,6 @@ models:
       context_window: 128000
     mlx-community/gemma-3-27b-it-qat-4bit: #bigger
       context_window: 128000
-
-analysis:
-  max_files: 0  # Default max files (3 = conservative for small models, 0 = unlimited)
-  max_prompt_chars: 10000000 # Default max characters for the combined prompt ; to-do: make this dynamic based on model context window
+    # cloud
+    gemini-2.5-flash-preview-04-17: # Google Gemini Flash via API
+      context_window: 1114112 # Standard context is ~1M

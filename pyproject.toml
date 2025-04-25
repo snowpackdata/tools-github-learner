@@ -21,6 +21,7 @@ dependencies = [
     "llm-mlx",
     "ttok",
     "tiktoken",
+    "llm-gemini",
 ]
 
 [project.scripts]

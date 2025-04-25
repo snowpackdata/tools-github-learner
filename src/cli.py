@@ -36,13 +36,8 @@ console = Console()
     "-m", 
     help="Language model to use for analysis"
 )
-@click.option(
-    "--max-files",
-    type=int,
-    help="Maximum number of files to include in analysis (0 = unlimited)"
-)
 @click.pass_context
-def cli(ctx, output_dir, language_model, max_files):
+def cli(ctx, output_dir, language_model):
     """GitHub Learner - Repository Analysis Tool.
     
     This tool helps you analyze GitHub repositories using local LLMs.
@@ -50,7 +45,6 @@ def cli(ctx, output_dir, language_model, max_files):
     ctx.ensure_object(dict)
     ctx.obj['output_dir_override'] = output_dir
     ctx.obj['language_model_override'] = language_model
-    ctx.obj['max_files_override'] = max_files
 
 
 @cli.command()
@@ -70,11 +64,7 @@ def config(ctx, save):
         current_config["paths"]["output_dir"] = ctx.obj['output_dir_override']
     if ctx.obj.get('language_model_override'):
         current_config["models"]["default_model"] = ctx.obj['language_model_override']
-    if ctx.obj.get('max_files_override') is not None:
-        # Ensure 'analysis' key exists
-        current_config.setdefault('analysis', {})
-        current_config["analysis"]["max_files"] = ctx.obj['max_files_override']
-        
+    
     # Use this potentially overridden view for display/save
     config_to_process = current_config
 
@@ -96,13 +86,8 @@ def config(ctx, save):
     type=click.Path(dir_okay=False),
     help="File to save analysis output"
 )
-@click.option(
-    "--max-files", # Allow overriding max_files specifically for this command
-    type=int,
-    help="Maximum number of files to include in analysis (0 = unlimited)"
-)
 @click.pass_context
-def analyze(ctx, repository_url, output_file, max_files):
+def analyze(ctx, repository_url, output_file):
     """Analyze a GitHub repository."""
     # Load base config
     current_config = load_config()
@@ -112,19 +97,10 @@ def analyze(ctx, repository_url, output_file, max_files):
         current_config["paths"]["output_dir"] = ctx.obj['output_dir_override']
     if ctx.obj.get('language_model_override'):
         current_config["models"]["default_model"] = ctx.obj['language_model_override']
-    # Apply analyze-specific command-line override for max_files
-    # Note: The group override for max_files is ignored if this specific one is given
-    if max_files is not None:
-        current_config.setdefault('analysis', {})
-        current_config["analysis"]["max_files"] = max_files
-    elif ctx.obj.get('max_files_override') is not None:
-        current_config.setdefault('analysis', {})
-        current_config["analysis"]["max_files"] = ctx.obj['max_files_override']
 
     # --- Use the effective config --- 
     effective_output_dir = current_config["paths"]["output_dir"]
     effective_model = current_config["models"]["default_model"]
-    effective_max_files = current_config.get("analysis", {}).get("max_files", 3) # Default to 3
 
     # Convert output_dir string to Path here *after* parsing
     if isinstance(effective_output_dir, str):
@@ -148,7 +124,6 @@ def analyze(ctx, repository_url, output_file, max_files):
     analysis_output = analyze_repository(
         repo_dir,
         effective_model, # Use effective model
-        effective_max_files # Use effective max files
     )
     
     if output_file:
@@ -191,8 +166,6 @@ def analyze(ctx, repository_url, output_file, max_files):
         # Add timestamp before printing saved path
         timestamp = datetime.now().strftime("%H:%M:%S")
         console.print(f"[{timestamp}] [bold green]Analysis saved to[/bold green]: {versioned_output_file}")
-        # Optionally print the markdown to console as before
-        console.print(Markdown(analysis_output))
 
 
 @cli.command()

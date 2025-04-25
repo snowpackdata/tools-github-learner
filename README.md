@@ -1,139 +1,108 @@
-# GitHub Learner
+# tools-github-learner
 
-A CLI tool for analyzing GitHub repositories using local LLMs.
+A CLI tool for analyzing GitHub repositories using local (or API-based) LLMs.
 
 ## Features
 
-- Clone and analyze GitHub repositories
-- Process code using Simon Willison's [files-to-prompt](https://github.com/simonw/files-to-prompt)
-- Generate repository insights using local MLX models
-
-## Requirements
-
-- Python 3.12+
-- Git
-- MLX-compatible system (Apple Silicon Mac for MLX acceleration)
+*   **Analyze Repositories:** Clones a GitHub repo and generates an AI analysis (architecture overview, use cases, dependencies, security concerns, etc.).
+*   **Configuration:** Uses `config.yaml` for setting paths and default models.
+*   **Model Support:** 
+    *   Supports local models via MLX (`llm-mlx` plugin).
+    *   Supports Google Gemini models via API (`llm-gemini` plugin).
+    *   Easily extendable via the `llm` library's plugin system.
+*   **Versioning:** Creates versioned analysis files (e.g., `repo-analysis-v1.md`, `repo-analysis-v2.md`) instead of overwriting.
+*   **Token Management:** Estimates input tokens and calculates available output tokens based on the selected model's context window (from `config.yaml`), instructing the model to stay within limits.
+*   **Cleanup:** Provides a command to remove cloned repositories and input files.
+*   **List:** Lists previously analyzed repositories.
 
 ## Installation
 
-```bash
-# Clone repository
-git clone https://github.com/snowpackdata/tools-github-learner.git
-cd tools-github-learner
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/tools-github-learner.git # Replace with your repo URL if applicable
+    cd tools-github-learner
+    ```
 
-# Create and activate virtual environment
-uv venv
-source .venv/bin/activate
+2.  **Create a virtual environment (recommended):**
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+    ```
 
-# Install with pip
-pip install -e .
+3.  **Install dependencies:**
+    ```bash
+    pip install -e .
+    ```
+    This installs the tool in editable mode along with dependencies like `click`, `llm`, `llm-mlx`, `llm-gemini`, `tiktoken`, `GitPython`, `PyYAML`, `Rich`, and `files-to-prompt`.
 
-# Ensure an MLX model is available
-# In the future, the package will allow for Cloud models
-# Check installed models (you should have at least one MLX model)
-llm mlx models
+4.  **Configure LLM:**
+    *   **Local Models (MLX):** Install desired MLX models using `llm mlx download-model <model-name>`. Example models are listed in `config.yaml`.
+    *   **Gemini Models:** 
+        *   Obtain a Gemini API key from Google AI Studio.
+        *   Set the key for `llm`: 
+            ```bash
+            llm keys set gemini
+            # Paste your API key when prompted
+            ```
+            Alternatively, set the `LLM_GEMINI_KEY` environment variable (e.g., in your `.zshrc` or `.bashrc`, make sure it's exported: `export LLM_GEMINI_KEY="YOUR_API_KEY"`). **Note:** The plugin expects `LLM_GEMINI_KEY`
+    *   Update `config.yaml` to set your desired `default_model` and add/verify `context_window` for models in `available_models`.
 
-# If no models are installed, download our default suggested Gemma-3 model:
-# We highly recommend using Instruction Trained (IT) models for best results, rather than PT (Pre-trained)
-# We also recommend QAT (Quantized Aware Training) models for even better performance when compressing memory
-llm mlx download-model mlx-community/gemma-3-12b-it-8bit
+## Configuration (`config.yaml`)
 
-# Or register an existing model from your Hugging Face cache:
-llm mlx import-models
-
-# For better performance, try a larger model (if your system can handle it):
-llm mlx download-model mlx-community/gemma-3-27b-it-qat-4bit
-```
-
-## Project Structure
-
-tools-github-learner/
-├── pyproject.toml         # Project metadata and dependencies
-├── .gitignore             # Ignores learnings directory and Python artifacts
-├── config.yaml            # Configuration file
-├── README.md              # Project documentation
-├── src/                   # Python package source
-│   ├── __init__.py        # Package initialization
-│   ├── cli.py             # Command-line interface
-│   ├── core.py            # Core functionality
-│   └── prompts.py         # LLM prompt templates
-└── learnings/             # Output directory (gitignored)
-    ├── repository/        # Cloned repositories 
-    └── repository-analysis.md  # Analysis output files
+*   `paths`: 
+    *   `output_dir`: Directory to store cloned repos and analysis files (default: `learnings`). Supports `~` expansion.
+*   `models`:
+    *   `default_model`: The model to use if `-m` is not specified.
+    *   `available_models`: A mapping of model names (matching `llm` identifiers) to their properties, primarily `context_window` (in tokens).
+*   `analysis`: (Currently empty, previously held deprecated settings)
 
 ## Usage
 
 ```bash
-# Basic analysis
-gl analyze https://github.com/simonw/files-to-prompt
+# Basic analysis (uses default model from config)
+# Example: Uses 'mlx-community/gemma-3-27b-it-qat-4bit' if that's the default
+gl analyze https://github.com/simonw/s3-credentials
 
-# Save output to file
-gl analyze https://github.com/simonw/files-to-prompt -f analysis.md
+# Specify a different model (e.g., Gemini Flash)
+# Requires API key setup (see Installation)
+gl analyze -m gemini-1.5-flash-latest https://github.com/simonw/llm
 
-# Limit analysis to just a few files (helpful for large repositories)
-gl analyze https://github.com/simonw/datasette --max-files 5
+# Specify a different local model
+gl analyze -m mlx-community/SmolLM-135M-Instruct-4bit https://github.com/some/small-repo
 
-# List previously analyzed repositories
+# Analyze and save to a specific file (disables auto-versioning for this run)
+gl analyze https://github.com/owner/repo --output-file my-custom-analysis.md
+
+# List analyzed repositories
 gl list
 
-# View or update configuration
+# Clean up all cloned repos and input files in the output directory
+gl cleanup
+
+# View current configuration (combines config file and CLI overrides)
 gl config
 
-# Cleanup cloned repositories
-# Remove a specific repo and its input file
-gl cleanup my-repo-name 
-# Remove ALL cloned repos and ALL input files (keeps analysis files)
-gl cleanup all 
-
-# Get help
-gl --help
-# Get help for cleanup
-gl cleanup --help
+# Set default model via CLI and save to config
+gl config -m mlx-community/gemma-3-1b-it-qat-8bit --save 
 ```
-
-## Configuration
-
-GitHub Learner requires a YAML config file named `config.yaml` located in the project root directory (where you run the `gl` command). If this file is missing or invalid, the tool will exit with an error.
-
-A default `config.yaml` is included in the repository:
-
-```yaml
-paths:
-  base_dir: '/absolute/path/to/tools-github-learner' # Auto-detected, usually no need to change
-  output_dir: learnings # Directory relative to base_dir for cloned repos and analyses
-models:
-  default_model: mlx-community/SmolLM-135M-Instruct-4bit # Default model ID for analysis
-  alternatives: # List of other available models (for reference)
-    - mlx-community/Llama-3.2-3B-Instruct-4bit
-    - mlx-community/gemma-3-1b-it-qat-8bit
-analysis:
-  max_files: 3 # Default max files (3 = conservative for small models, 0 = unlimited)
-  max_prompt_chars: 15000 # Default max characters for the combined prompt
-```
-
-You can use any MLX model registered with the LLM CLI. For a better experience with larger repositories, consider using a larger model.
-
-**Important Notes on Defaults & Limits:**
-
-*   The default `max_files` is set to **3** to ensure basic functionality even with small models like SmolLM, which have limited context windows.
-*   A `max_prompt_chars` limit (default: 15000) is enforced. If the total characters of the collected file contents plus the analysis instructions exceed this limit, the analysis will be aborted with an error message *before* calling the LLM. This prevents generating nonsensical output due to context overflow.
-*   For analyzing more files or larger repositories:
-    1.  Increase the file limit: `gl analyze <url> --max-files <number>`
-    2.  Increase the character limit: Edit `max_prompt_chars` in `config.yaml`.
-    3.  Use a model with a larger context window: `gl analyze <url> -m <larger_model_name>`
-    4.  Consider using Cloud models via `llm` if local model capacity is insufficient.
 
 ## How it Works
 
-1.  **Cloning:** Clones the target repository into the `output_dir` specified in `config.yaml`.
-2.  **File Collection:** Uses `files-to-prompt` to gather the content of text files (up to `max_files`), excluding hidden files/dirs, test dirs, docs, build artifacts, and virtual environments.
-3.  **Prompt Assembly:** Combines the collected file content with analysis instructions.
-4.  **Limit Check:** Verifies if the combined prompt exceeds `max_prompt_chars`. If so, aborts with an error.
-5.  **LLM Analysis:** Sends the prompt to the specified `default_model` (or the one provided via `-m`) using the `llm` library (specifically `llm-mlx`).
-6.  **Output:** Saves the analysis (or error message) to a markdown file in the `output_dir`.
+1.  **Clone:** Clones the target repository into the `output_dir`.
+2.  **Gather Files:** Uses `files-to-prompt` to collect content from non-excluded files.
+3.  **Token Calculation:** 
+    *   Combines file content with the analysis prompt.
+    *   Uses `tiktoken` (cl100k_base) to estimate input token count.
+    *   Looks up the selected model's `context_window` in `config.yaml`.
+    *   Calculates available output tokens (`(context_window - input_tokens) * 0.9`).
+    *   Injects the calculated output token limit into the final prompt sent to the LLM.
+4.  **LLM Interaction:** Sends the combined prompt (including the token limit instruction) to the specified LLM (local via MLX or remote via Gemini API) using the `llm` library.
+5.  **Save Output:** Saves the LLM's response to a versioned markdown file (e.g., `learnings/repo-name-analysis-v1.md`).
 
-**Note**: Smaller models like SmolLM have limited context length (2048 tokens) which may result in truncated analysis for larger repositories. For better results with larger codebases:
+## Contributing
 
-1. Use a model with a larger context window like Gemma-3.
-2. Limit the number of files analyzed with the `--max-files` option
-3. For production use, consider using a large local model or Cloud model
+Contributions are welcome! Please open an issue or submit a pull request.
+
+## License
+
+[Specify your license, e.g., MIT License]
