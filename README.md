@@ -1,6 +1,7 @@
 # tools-github-learner
 
-A CLI tool for analyzing GitHub repositories using local (or API-based) LLMs.
+Building off of the amazingly elegant work of Simon Willison[https://github.com/simonw], here is a much less elegant, but still quite useful tool to analyze GitHub repositories. The intent is to help you quickly understand a repo, build on it, integrate it, or emulate it.
+Happy learning!
 
 ## Features
 
@@ -13,6 +14,7 @@ A CLI tool for analyzing GitHub repositories using local (or API-based) LLMs.
 *   **Versioning:** Creates versioned analysis files (e.g., `repo-analysis-v1.md`, `repo-analysis-v2.md`) instead of overwriting.
 *   **Token Management:** Estimates input tokens and calculates available output tokens based on the selected model's context window (from `config.yaml`), instructing the model to stay within limits.
 *   **Cleanup:** Provides a command to remove cloned repositories and input files.
+*   **Refresh:** Provides a command to completely remove the output directory and all its contents (repos, inputs, analyses).
 *   **List:** Lists previously analyzed repositories.
 
 ## Installation
@@ -25,8 +27,8 @@ A CLI tool for analyzing GitHub repositories using local (or API-based) LLMs.
 
 2.  **Create a virtual environment (recommended):**
     ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+    uv venv
+    source .venv/bin/activate
     ```
 
 3.  **Install dependencies:**
@@ -79,6 +81,9 @@ gl list
 # Clean up all cloned repos and input files in the output directory
 gl cleanup
 
+# Refresh (delete) the entire output directory and its contents
+gl refresh
+
 # View current configuration (combines config file and CLI overrides)
 gl config
 
@@ -105,4 +110,4 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
 
-[Specify your license, e.g., MIT License]
+MIT License

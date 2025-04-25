@@ -288,6 +288,52 @@ def cleanup(ctx):
 
 
 @cli.command()
+@click.pass_context
+def refresh(ctx):
+    """Remove the entire output directory and all its contents."""
+    # Load config manually inside the function
+    config = load_config()
+    # Allow global override for output dir if provided
+    output_dir_str = config["paths"]["output_dir"] # Get base path string from config
+    if ctx.obj.get('output_dir_override'): 
+        output_dir_str = ctx.obj['output_dir_override'] # Override with string from CLI arg
+
+    # Convert to Path *after* parsing and overrides
+    if "~" in output_dir_str:
+        output_dir_str = os.path.expanduser(output_dir_str)
+    output_dir = Path(output_dir_str)
+    
+    # Ensure the path is absolute or relative to BASE_DIR for safety
+    if not output_dir.is_absolute():
+        from core import BASE_DIR
+        output_dir = BASE_DIR / output_dir
+
+    if not output_dir.exists():
+        console.print(f"[yellow]Output directory not found, nothing to refresh:[/yellow] {output_dir}")
+        # Still create it if it doesn't exist
+        try:
+            os.makedirs(output_dir)
+            console.print(f"[green]Created output directory:[/green] {output_dir}")
+        except Exception as e:
+            console.print(f"[bold red]Error creating output directory {output_dir}: {e}[/bold red]")
+        return
+
+    # Confirmation (optional but recommended for destructive actions)
+    if not click.confirm(f"[bold red]Are you sure you want to delete EVERYTHING in {output_dir}?[/bold red]", abort=True):
+        return # User aborted
+
+    console.print(f"[bold yellow]Removing entire output directory:[/bold yellow] {output_dir}")
+    try:
+        shutil.rmtree(output_dir)
+        console.print(f"[bold green]Successfully removed {output_dir}[/bold green]")
+        # Recreate the directory
+        os.makedirs(output_dir)
+        console.print(f"[green]Recreated empty directory:[/green] {output_dir}")
+    except Exception as e:
+        console.print(f"[bold red]Error removing directory {output_dir}: {e}[/bold red]")
+
+
+@cli.command()
 def list():
     """List all analyzed repositories."""
     # Load config to determine the learnings directory
