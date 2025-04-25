@@ -1,11 +1,11 @@
 # tools-github-learner
 
-Building off of the amazingly elegant work of Simon Willison[https://github.com/simonw], here is a much less elegant, but still quite useful tool to analyze GitHub repositories. The intent is to help you quickly understand a repo, build on it, integrate it, and/or emulate it.
+Building off of the amazingly elegant work of [Simon Willison](https://github.com/simonw), here is a much less elegant, but still quite useful tool to analyze GitHub repositories. The intent is to help you quickly understand a repo, build on it, integrate it, and/or emulate it.
 Happy learning from Snowpack Data!
 
 ## ...but why??
 Why build this when a Cloud model can do something similar very quickly (and as of April 2025, frankly much more powerfully)?
-1. At Snowpack Data[https://snowpack-data.com/] we are building towards an open-source future where increasingly cutting-edge capabilities are accessible locally, securely, offline, and - most importanly - for free. We're not there yet, but the community is on its way...
+1. At [Snowpack Data](https://snowpack-data.com/) we are building towards an open-source future where increasingly cutting-edge capabilities are accessible locally, securely, offline, and - most importanly - for free. We're not there yet, but the community is on its way...
 2. We're all about learning. No better way to learn than to build!
 3. Pay an homage to great builders like Simon who generously open-source their work for everyone's benefit.
 
@@ -109,7 +109,7 @@ gl config
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
-Better yet, contribute directly to Simon's llm[https://github.com/simonw/llm] and files-to-prompt[https://github.com/simonw/files-to-prompt] libraries :D
+Better yet, contribute directly to Simon's [llm](https://github.com/simonw/llm) and [files-to-prompt](https://github.com/simonw/files-to-prompt) libraries :D
 
 ## License
 
