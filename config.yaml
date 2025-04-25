@@ -3,12 +3,17 @@ paths:
   output_dir: learnings
 
 models:
-  default_model: mlx-community/gemma-3-12b-it-8bit
-  alternatives:
-    - mlx-community/SmolLM-135M-Instruct-4bit #smallest
-    - mlx-community/gemma-3-1b-it-qat-8bit #small
-    - mlx-community/gemma-3-12b-it-8bit #big
+  default_model: mlx-community/gemma-3-27b-it-qat-4bit
+  available_models:
+    mlx-community/SmolLM-135M-Instruct-4bit: #smallest
+      context_window: 32000
+    mlx-community/gemma-3-1b-it-qat-8bit: #small
+      context_window: 32000
+    mlx-community/gemma-3-12b-it-8bit: #big
+      context_window: 128000
+    mlx-community/gemma-3-27b-it-qat-4bit: #bigger
+      context_window: 128000
 
 analysis:
   max_files: 0  # Default max files (3 = conservative for small models, 0 = unlimited)
-  max_prompt_chars: 150000 # Default max characters for the combined prompt ; to-do: make this dynamic based on model context window
+  max_prompt_chars: 10000000 # Default max characters for the combined prompt ; to-do: make this dynamic based on model context window

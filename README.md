@@ -33,14 +33,16 @@ pip install -e .
 # Check installed models (you should have at least one MLX model)
 llm mlx models
 
-# If no models are installed, download the default SmolLM model:
+# If no models are installed, download our default suggested Gemma-3 model:
+# We highly recommend using Instruction Trained (IT) models for best results, rather than PT (Pre-trained)
+# We also recommend QAT (Quantized Aware Training) models for even better performance when compressing memory
 llm mlx download-model mlx-community/gemma-3-12b-it-8bit
 
 # Or register an existing model from your Hugging Face cache:
 llm mlx import-models
 
 # For better performance, try a larger model (if your system can handle it):
-llm mlx download-model mlx-community/gemma-3-27b-it-8bit
+llm mlx download-model mlx-community/gemma-3-27b-it-qat-4bit
 ```
 
 ## Project Structure
@@ -77,8 +79,16 @@ gl list
 # View or update configuration
 gl config
 
+# Cleanup cloned repositories
+# Remove a specific repo and its input file
+gl cleanup my-repo-name 
+# Remove ALL cloned repos and ALL input files (keeps analysis files)
+gl cleanup all 
+
 # Get help
 gl --help
+# Get help for cleanup
+gl cleanup --help
 ```
 
 ## Configuration

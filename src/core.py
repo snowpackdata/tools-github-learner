@@ -15,6 +15,8 @@ from typing import Optional, Dict, Any, List, Union
 from rich.console import Console
 from prompts import REPO_ANALYSIS_PROMPT
 import logging
+from datetime import datetime
+import tiktoken
 
 console = Console()
 
@@ -58,15 +60,6 @@ def save_config(config):
     """Save configuration to file."""
     with open(CONFIG_FILE, "w") as f:
         yaml.dump(config, f)
-
-# Load the config once at module import time
-config = load_config()
-
-# Derive LEARNINGS_DIR from config
-LEARNINGS_DIR = BASE_DIR / config["paths"]["output_dir"]
-
-# Ensure the learnings directory exists
-os.makedirs(LEARNINGS_DIR, exist_ok=True)
 
 
 def normalize_github_url(url: str) -> str:
@@ -112,9 +105,22 @@ def clone_repository(url: str, target_dir: Optional[Path] = None) -> Path:
     normalized_url = normalize_github_url(url)
     repo_name = get_repo_name_from_url(normalized_url)
     
+    # Determine target directory if None
     if target_dir is None:
-        target_dir = LEARNINGS_DIR
-    
+        # Load config here just to get the output path
+        try: 
+            current_config = load_config()
+            output_dir_str = current_config["paths"]["output_dir"]
+            if "~" in output_dir_str:
+                 output_dir_str = os.path.expanduser(output_dir_str)
+            target_dir = BASE_DIR / output_dir_str # Ensure it's relative to BASE_DIR if not absolute
+        except Exception as e:
+            console.print(f"[bold red]Error loading config to determine target directory: {e}[/bold red]")
+            sys.exit(1)
+    else:
+        # If target_dir was provided (e.g., from analyze), ensure it's Path
+        target_dir = Path(target_dir)
+
     # Create the repository directory directly under target_dir
     repo_dir = target_dir / repo_name
     os.makedirs(repo_dir, exist_ok=True)
@@ -146,10 +152,24 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
         language_model: Name of the language model to use
         max_files: Maximum number of files to include in analysis (None = use config value)
     """
-    # Use config value if max_files is not provided
     current_config = load_config() # Load fresh config for analysis settings
+    # Determine LEARNINGS_DIR within the function if needed for saving input file
+    learnings_dir_str = current_config["paths"]["output_dir"]
+    if "~" in learnings_dir_str:
+        learnings_dir_str = os.path.expanduser(learnings_dir_str)
+    # Assuming output_dir is relative to BASE_DIR unless absolute path provided
+    learnings_path = Path(learnings_dir_str)
+    if not learnings_path.is_absolute():
+        learnings_path = BASE_DIR / learnings_path
+    os.makedirs(learnings_path, exist_ok=True) # Ensure dir exists
+
+    # Use config value if max_files is not provided
     if max_files is None:
         max_files = current_config.get("analysis", {}).get("max_files", 3) # Default to 3 if missing
+
+    # --- DEBUG LOG --- 
+    print(f"DEBUG: Effective max_files = {max_files}")
+    # --- END DEBUG LOG ---
 
     max_prompt_chars = current_config.get("analysis", {}).get("max_prompt_chars", 15000) # Default if missing
 
@@ -222,6 +242,10 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
         # Read the output
         temp_file.seek(0)
         prompt = temp_file.read()
+
+        # --- DEBUG LOG --- 
+        print(f"DEBUG: Length of files-to-prompt output (prompt var): {len(prompt)}")
+        # --- END DEBUG LOG ---
         
         # --- Refined File Detail Extraction ---
         prompt_lines = prompt.split('\n')
@@ -261,7 +285,7 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
     input_text_content += f"\n## Combined File Content\n\n{prompt}\n"
 
     # Save input text to separate file
-    input_text_filename = LEARNINGS_DIR / f"{repo_dir.name}-input-text.md"
+    input_text_filename = learnings_path / f"{repo_dir.name}-input-text.md"
     try:
         with open(input_text_filename, "w", encoding="utf-8") as f:
             f.write(input_text_content)
@@ -269,9 +293,71 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
     except Exception as e:
         console.print(f"[yellow]Warning: Could not save input text file: {e}[/yellow]")
     # --- End Input Text Handling ---
+
+    # --- Calculate Token Count and Available Output Tokens ---
+    # Create the full analysis prompt FIRST
+    analysis_prompt_template = REPO_ANALYSIS_PROMPT
+    full_analysis_prompt = prompt + "\n\n" + analysis_prompt_template # Use template for initial calc
+
+    input_tokens = 0
+    available_output_tokens = 0
+    context_window = 0 # Initialize
     
+    try:
+        # Use tiktoken to count tokens (cl100k_base is default for gpt-4/3.5)
+        encoding = tiktoken.get_encoding("cl100k_base")
+        input_tokens = len(encoding.encode(full_analysis_prompt))
+        console.print(f"[dim]Input tokens estimate (cl100k_base): {input_tokens}[/dim]")
+        
+        # Get context window for the selected model
+        try:
+            model_config = current_config["models"]["available_models"][language_model]
+            context_window = model_config["context_window"]
+            console.print(f"[dim]Model context window: {context_window}[/dim]")
+
+            # Calculate available output tokens with 10% buffer
+            available_output_tokens = int((context_window - input_tokens) * 0.9)
+            if available_output_tokens < 0:
+                available_output_tokens = 0 # Prevent negative tokens
+            console.print(f"[dim]Available output tokens (target): {available_output_tokens}[/dim]")
+
+        except KeyError:
+            console.print(f"[yellow]Warning: Could not find model '{language_model}' or 'context_window' in config.yaml. Cannot calculate available output tokens.[/yellow]")
+            available_output_tokens = -1 # Indicate failure to calculate
+        except Exception as e:
+             console.print(f"[yellow]Warning: Error accessing context window from config: {e}[/yellow]")
+             available_output_tokens = -1 # Indicate failure to calculate
+
+    except tiktoken.RegistryError:
+         console.print("[yellow]Warning: Tiktoken encoding 'cl100k_base' not found. Cannot estimate tokens.[/yellow]")
+         available_output_tokens = -1 # Indicate failure to calculate
+    except Exception as e:
+        console.print(f"[yellow]Warning: Error counting tokens with tiktoken: {e}[/yellow]")
+        available_output_tokens = -1 # Indicate failure to calculate
+    # --- End Token Calculation ---
+
+    # --- Modify Prompt with Token Limit ---
+    final_repo_analysis_prompt = analysis_prompt_template
+    if available_output_tokens != -1: # Only add if calculation succeeded
+        final_repo_analysis_prompt = analysis_prompt_template.replace(
+            "<available_output_tokens>", 
+            str(available_output_tokens)
+        )
+    else:
+        # If calculation failed, remove the placeholder line or replace with generic message
+        final_repo_analysis_prompt = "\n".join(
+            line for line in analysis_prompt_template.split('\n') 
+            if "<available_output_tokens>" not in line
+        )
+        final_repo_analysis_prompt += "\nWarning: Output token limit could not be determined."
+
+    # Construct the final prompt sent to the model
+    final_prompt_for_llm = prompt + "\n\n" + final_repo_analysis_prompt
+    # --- End Prompt Modification ---
+
     # Send the prompt to the local LLM using direct model loading
-    console.print("[bold green]Generating AI analysis...[/bold green]")
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    console.print(f"[{timestamp}] [bold green]Generating AI analysis...[/bold green]")
     
     try:
         # Instead of using llm.get_model, directly use MlxModel
@@ -283,28 +369,38 @@ def analyze_repository(repo_dir: Path, language_model: str, max_files: int = Non
             import llm
             model = llm.get_model(language_model)
         
-        # Create a more specific prompt for repository analysis
-        analysis_prompt = prompt + "\n\n" + REPO_ANALYSIS_PROMPT
+        # --- DEBUG LOG (using final prompt length) ---
+        print(f"DEBUG: Length of FINAL prompt sent to LLM (chars): {len(final_prompt_for_llm)}")
+        # --- END DEBUG LOG ---
 
-        # --- Fail Fast Check ---
-        if len(analysis_prompt) > max_prompt_chars:
+        # --- Fail Fast Check (Use Character Limit for now) ---
+        # Note: We could potentially use the *input_tokens* count vs a token limit 
+        # derived from max_prompt_chars, but char limit is simpler for now.
+        if len(final_prompt_for_llm) > max_prompt_chars:
             error_message = (
-                f"Combined prompt content ({len(analysis_prompt)} characters) exceeds the configured limit "
+                f"Combined prompt content ({len(final_prompt_for_llm)} characters) exceeds the configured character limit "
                 f"({max_prompt_chars} characters). Analysis aborted."
             )
             console.print(f"[bold red]Error: {error_message}[/bold red]")
             console.print("Consider increasing 'max_prompt_chars' in config.yaml, reducing '--max-files',")
             console.print("or using a model with a larger context window.")
-            # Format the error output with the new header style
             error_header = f"# {repo_dir.name} github repo reviewed by {language_model}\n\n"
             return error_header + f"Error: {error_message}\n" # Return the error with the new header
         # --- End Fail Fast Check ---
 
-        # Generate the response
-        response = model.prompt(analysis_prompt)
+        # Generate the response using the MODIFIED prompt
+        # Try passing max_tokens directly to the prompt method
+        response = model.prompt(
+            final_prompt_for_llm, 
+            max_tokens=available_output_tokens # Pass calculated limit
+        )
         
-        # --- REMOVED LOG C ---
+        # --- DEBUG LOG ---
         response_text = response.text()
+        print(f"DEBUG: Raw response_text length: {len(response_text)}")
+        print(f"DEBUG: Raw response_text START: {response_text[:200]}...")
+        print(f"DEBUG: Raw response_text END: ...{response_text[-200:]}")
+        # --- END DEBUG LOG ---
 
         # Format the successful analysis output with the new header
         analysis_header = f"# {repo_dir.name} github repo reviewed by {language_model}\n\n"

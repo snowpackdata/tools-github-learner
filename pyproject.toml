@@ -19,6 +19,8 @@ dependencies = [
     "rich",
     "llm",
     "llm-mlx",
+    "ttok",
+    "tiktoken",
 ]
 
 [project.scripts]
