@@ -3,7 +3,7 @@ paths:
   output_dir: learnings
 
 models:
-  default_model: gemini-2.5-flash-preview-04-17
+  default_model: mlx-community/gemma-3-27b-it-qat-4bit
   available_models:
     # local
     mlx-community/SmolLM-135M-Instruct-4bit: #smallest

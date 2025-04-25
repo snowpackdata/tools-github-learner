@@ -169,57 +169,64 @@ def analyze_repository(repo_dir: Path, language_model: str):
     if language_model.startswith("mlx:"):
         language_model = language_model.replace("mlx:", "", 1)
     
-    # Get list of files in the repository
-    file_list = []
-    
-    # Walk through the repository directory
-    excluded_dirs = {'.git', '.venv', 'venv', 'node_modules', 'dist', 'build', 'target', 'docs', 'doc', 'tests'}
-    # Add common non-code files to exclude (case-insensitive)
-    excluded_files = {
-        'license', 'license.txt', 'license.md',
-        'copying', 'copying.txt', 'copying.md',
-        'notice', 'notice.txt', 'notice.md',
-        'contributing', 'contributing.md', 'contributing.txt',
-        'code_of_conduct', 'code_of_conduct.md', 'code_of_conduct.txt',
-        'security.md',
-        'changelog', 'changelog.md', 'changelog.txt',
-        'history', 'history.md', 'history.txt',
-        'releases', 'releases.md',
-    }
-    for root, dirs, files in os.walk(repo_dir):
-        # Skip hidden directories and explicitly excluded directories
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in excluded_dirs]
-        
-        for file in files:
-            # Skip hidden files and explicitly excluded filenames
-            if file.startswith('.') or file.lower() in excluded_files:
-                continue
-                
-            file_path = os.path.join(root, file)
-            try:
-                # Try to read the file as text to ensure it's not binary
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    f.read(1024)  # Just read a bit to check if it's text
-                file_list.append(file_path)
-            except UnicodeDecodeError:
-                # Skip binary files
-                continue
-    
-    # Create a temporary file to store the output
+    # Create a temporary file to store the output from files-to-prompt
     with tempfile.NamedTemporaryFile(delete=False, mode='w+') as temp_file:
-        # Build the command to run files-to-prompt with markdown option
-        cmd = [sys.executable, "-m", "files_to_prompt", "--markdown"]
-            
-        # Add file paths to command
-        cmd.extend(file_list)
+        # Build the command to run files-to-prompt, passing repo_dir and ignore flags
+        cmd = [
+            sys.executable, 
+            "-m", 
+            "files_to_prompt", 
+            "--markdown", 
+            str(repo_dir) # Pass the repo directory itself
+        ]
+        
+        # Add ignore flags corresponding to previous logic
+        ignore_flags = [
+            # Directories
+            "--ignore", ".git",
+            "--ignore", ".venv",
+            "--ignore", "venv",
+            "--ignore", "node_modules",
+            "--ignore", "dist",
+            "--ignore", "build",
+            "--ignore", "target",
+            "--ignore", "docs",
+            "--ignore", "doc", 
+            "--ignore", "tests",
+            # Common non-code files (using patterns)
+            "--ignore", "LICENSE*", 
+            "--ignore", "COPYING*", 
+            "--ignore", "NOTICE*", 
+            "--ignore", "CONTRIBUTING*", 
+            "--ignore", "CODE_OF_CONDUCT*",
+            "--ignore", "SECURITY.md",
+            "--ignore", "CHANGELOG*",
+            "--ignore", "HISTORY*",
+            "--ignore", "RELEASES*",
+            # Add other common patterns if needed (e.g., logs, specific config files)
+            "--ignore", "*.log",
+        ]
+        cmd.extend(ignore_flags)
         
         # Run the command and capture output
         try:
-            subprocess.run(cmd, stdout=temp_file, check=True)
+            # Log the command being run for debugging if needed
+            # console.print(f"[dim]Running command: {' '.join(cmd)}[/dim]") 
+            subprocess.run(cmd, stdout=temp_file, check=True, cwd=BASE_DIR) # Ensure correct CWD
             temp_file.flush()
         except subprocess.CalledProcessError as e:
             console.print(f"[bold red]Error running files-to-prompt:[/bold red] {e}")
-            return f"Error analyzing repository: {e}"
+            # Attempt to read stderr if available
+            if e.stderr:
+                 try:
+                     stderr_output = e.stderr.decode('utf-8')
+                     console.print(f"[red]files-to-prompt stderr:[/red]\n{stderr_output}")
+                 except Exception:
+                     console.print("[red](Could not decode stderr)[/red]")
+            return f"Error analyzing repository: files-to-prompt failed. {e}"
+        except FileNotFoundError:
+            console.print(f"[bold red]Error: 'files-to-prompt' command not found. Is it installed and in PATH?[/bold red]")
+            return "Error analyzing repository: files-to-prompt not found."
 
         # Read the output
         temp_file.seek(0)
